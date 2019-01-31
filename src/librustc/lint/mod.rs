@@ -22,11 +22,14 @@ pub use self::Level::*;
 pub use self::LintSource::*;
 
 use rustc_data_structures::sync::{self, Lrc};
+use rustc_data_structures::fx::FxHashSet;
 
 use crate::errors::{DiagnosticBuilder, DiagnosticId};
 use crate::hir::def_id::{CrateNum, LOCAL_CRATE};
 use crate::hir::intravisit;
 use crate::hir;
+use crate::hir::HirId;
+use crate::hir::CRATE_HIR_ID;
 use crate::lint::builtin::BuiltinLintDiagnostics;
 use crate::lint::builtin::parser::{QUESTION_MARK_MACRO_SEP, ILL_FORMED_ATTRIBUTE_INPUT};
 use crate::session::{Session, DiagnosticMessageId};
@@ -722,11 +725,16 @@ fn lint_levels<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx, 'tcx>, cnum: CrateNum)
     };
     let krate = tcx.hir().krate();
 
-    builder.with_lint_attrs(ast::CRATE_NODE_ID, &krate.attrs, |builder| {
-        intravisit::walk_crate(builder, krate);
-    });
+    let push = builder.levels.push(&krate.attrs);
+    builder.levels.register_id(CRATE_HIR_ID);
+    intravisit::walk_crate(&mut builder, krate);
+    builder.levels.pop(push);
 
     Lrc::new(builder.levels.build_map())
+}
+
+fn lint_level_changed<'tcx>(tcx: TyCtxt<'_, 'tcx, 'tcx>, cnum: CrateNum) -> Lrc<FxHashSet<HirId>> {
+    Lrc::new(tcx.lint_levels(cnum).id_to_set.keys().cloned().collect())
 }
 
 struct LintLevelMapBuilder<'a, 'tcx: 'a> {
@@ -742,7 +750,9 @@ impl<'a, 'tcx> LintLevelMapBuilder<'a, 'tcx> {
         where F: FnOnce(&mut Self)
     {
         let push = self.levels.push(attrs);
-        self.levels.register_id(self.tcx.hir().definitions().node_to_hir_id(id));
+        if push.changed {
+            self.levels.register_id(self.tcx.hir().definitions().node_to_hir_id(id));
+        }
         f(self);
         self.levels.pop(push);
     }
@@ -807,6 +817,7 @@ impl<'a, 'tcx> intravisit::Visitor<'tcx> for LintLevelMapBuilder<'a, 'tcx> {
 
 pub fn provide(providers: &mut Providers<'_>) {
     providers.lint_levels = lint_levels;
+    providers.lint_level_changed = lint_level_changed;
 }
 
 /// Returns whether `span` originates in a foreign crate's external macro.
