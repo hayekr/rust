@@ -467,6 +467,59 @@ fn write_scope_tree(
 ) -> io::Result<()> {
     let indent = depth * INDENT.len();
 
+    let parent_data = &mir.source_scopes[parent];
+    let parent_local_data = if let ClearCrossCrate::Set(data) = &mir.source_scope_local_data {
+        data.get(parent)
+    } else {
+        None
+    };
+
+    if tcx.sess.verbose() {
+        writeln!(w, "{0:1$}span: {2:?}", "", indent, parent_data.span)?;
+        if let Some(local_data) = parent_local_data {
+            writeln!(w, "{0:1$}lint_root: {2:?}", "", indent, local_data.lint_root)?;
+            writeln!(w, "{0:1$}safety: {2:?}", "", indent, local_data.safety)?;
+        }
+    }
+
+    // User variable types (including the user's name in a comment).
+    for local in mir.vars_iter() {
+        let var = &mir.local_decls[local];
+        let (name, source_info) = if var.source_info.scope == parent {
+            (var.name.unwrap(), var.source_info)
+        } else {
+            // Not a variable or not declared in this scope.
+            continue;
+        };
+
+        let mut_str = if var.mutability == Mutability::Mut {
+            "mut "
+        } else {
+            ""
+        };
+
+        let mut indented_var = format!(
+            "{0:1$}let {2}{3:?}: {4:?}",
+            INDENT,
+            indent,
+            mut_str,
+            local,
+            var.ty
+        );
+        for user_ty in var.user_ty.projections() {
+            write!(indented_var, " as {:?}", user_ty).unwrap();
+        }
+        indented_var.push_str(";");
+        writeln!(
+            w,
+            "{0:1$} // \"{2}\" in {3}",
+            indented_var,
+            ALIGN,
+            name,
+            comment(tcx, source_info)
+        )?;
+    }
+
     let children = match scope_tree.get(&parent) {
         Some(children) => children,
         None => return Ok(()),
@@ -476,45 +529,6 @@ fn write_scope_tree(
         let data = &mir.source_scopes[child];
         assert_eq!(data.parent_scope, Some(parent));
         writeln!(w, "{0:1$}scope {2} {{", "", indent, child.index())?;
-
-        // User variable types (including the user's name in a comment).
-        for local in mir.vars_iter() {
-            let var = &mir.local_decls[local];
-            let (name, source_info) = if var.source_info.scope == child {
-                (var.name.unwrap(), var.source_info)
-            } else {
-                // Not a variable or not declared in this scope.
-                continue;
-            };
-
-            let mut_str = if var.mutability == Mutability::Mut {
-                "mut "
-            } else {
-                ""
-            };
-
-            let indent = indent + INDENT.len();
-            let mut indented_var = format!(
-                "{0:1$}let {2}{3:?}: {4:?}",
-                INDENT,
-                indent,
-                mut_str,
-                local,
-                var.ty
-            );
-            for user_ty in var.user_ty.projections() {
-                write!(indented_var, " as {:?}", user_ty).unwrap();
-            }
-            indented_var.push_str(";");
-            writeln!(
-                w,
-                "{0:1$} // \"{2}\" in {3}",
-                indented_var,
-                ALIGN,
-                name,
-                comment(tcx, source_info)
-            )?;
-        }
 
         write_scope_tree(tcx, mir, scope_tree, w, child, depth + 1)?;
 
