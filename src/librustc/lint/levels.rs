@@ -535,7 +535,7 @@ impl<'a> HashStable<StableHashingContext<'a>> for LintLevelMap {
 
         lint_cap.hash_stable(hcx, hasher);
 
-        hcx.while_hashing_spans(true, |hcx| {
+        hcx.while_hashing_spans(false, |hcx| {
             list.len().hash_stable(hcx, hasher);
 
             // We are working under the assumption here that the list of
