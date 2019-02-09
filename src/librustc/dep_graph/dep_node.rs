@@ -574,6 +574,7 @@ define_dep_nodes!( <'tcx>
     [] HasPanicHandler(CrateNum),
     [input] ExternCrate(DefId),
     [eval_always] LintLevels,
+    [eval_always] LintLevelChanged(CrateNum),
     [] Specializes { impl1: DefId, impl2: DefId },
     [input] InScopeTraits(DefIndex),
     [input] ModuleExports(DefId),

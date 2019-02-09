@@ -1330,6 +1330,7 @@ pub fn force_from_dep_node<'a, 'gcx, 'lcx>(tcx: TyCtxt<'a, 'gcx, 'lcx>,
         DepKind::HasPanicHandler => { force!(has_panic_handler, krate!()); }
         DepKind::ExternCrate => { force!(extern_crate, def_id!()); }
         DepKind::LintLevels => { force!(lint_levels, LOCAL_CRATE); }
+        DepKind::LintLevelChanged => { force!(lint_level_changed, krate!()); }
         DepKind::InScopeTraits => { force!(in_scope_traits_map, def_id!().index); }
         DepKind::ModuleExports => { force!(module_exports, def_id!()); }
         DepKind::IsSanitizerRuntime => { force!(is_sanitizer_runtime, krate!()); }
